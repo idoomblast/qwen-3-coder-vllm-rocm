@@ -1,0 +1,64 @@
+services:
+  vllm:
+    image: vllm/vllm-openai-rocm:v0.15.1
+    container_name: vllm-mi300x-throughput
+    privileged: true
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    volumes:
+      - ./models:/models              # Cache model download
+    environment:
+      - HIP_VISIBLE_DEVICES=0
+      - VLLM_USE_V1=1                     # vLLM v1 engine (lebih cepat)
+      - VLLM_ROCM_USE_AITER=0             # Disable AITER (JIT compile gagal di container)
+      - VLLM_USE_TRITON_FLASH_ATTN=1      # Fallback ke Triton Flash Attention
+      - VLLM_USE_ROCM_SKINNY_GEMM=1       # Optimasi MI300X specific
+      - MIOPEN_FIND_MODE=FAST             # MIOpen kernel tuning
+      - SAFETENSORS_FAST_GPU=1            # Fast GPU loading
+      - PYTORCH_ALLOC_CONF=expandable_segments:True
+      - VLLM_API_KEY=${VLLM_API_KEY}
+      - HF_ENDPOINT=https://hf-mirror.com    # Bypass CloudFront block
+      - HF_TOKEN=${HF_TOKEN}                  # Auth untuk download model
+      # Optimasi throughput
+      - VLLM_SCHEDULER_DELAY_FACTOR=0.0   # No delay, process immediately
+      - VLLM_ENGINE_ITERATION_TIMEOUT_MS=60000
+    ports:
+      - "8000:8000"
+    ipc: host  # Penting untuk shared memory antar proses
+    command:
+      - --model
+      - unsloth/Qwen3-Coder-Next-FP8-Dynamic
+      - --max-model-len=262144         # Full 256K context
+      - --max-num-seqs=4               # Kurangin concurrent req, karena context gede
+      - --max-num-batched-tokens=262144
+      - --gpu-memory-utilization=0.95
+      - --kv-cache-dtype=fp8           # FP8 KV cache = 2x context capacity
+      - --enable-chunked-prefill       # Overlap prefill & decode
+      - --tensor-parallel-size=1
+      - --enable-auto-tool-choice      # Qwen3-Coder-Next tool calling
+      - --tool-call-parser=qwen3_coder # Parser khusus Qwen3 Coder
+      - --served-model-name=qwen3-coder-next # Custom model name untuk API
+      - --download-dir=/models         # Simpan model ke volume
+      - --port=8000
+      - --api-key=${VLLM_API_KEY}
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 300s               # FP8 model ~80GB, butuh waktu download pertama
+    restart: unless-stopped
+
+  # ─── Cloudflare Tunnel (Ingress) ──────────────────────────────
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared-tunnel
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      vllm:
+        condition: service_started
+    restart: unless-stopped

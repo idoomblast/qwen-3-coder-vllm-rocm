@@ -1,0 +1,31 @@
+# ─── Model files (huge, jangan masuk git) ────────────────
+models/
+*.gguf
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.onnx
+
+# ─── Environment & Secrets ───────────────────────────────
+.env
+*.env.local
+
+# ─── Python ──────────────────────────────────────────────
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.Python
+
+# ─── SWE-bench results ──────────────────────────────────
+results/
+evaluation_results/
+logs/
+
+# ─── Docker build artifacts ──────────────────────────────
+Dockerfile
+
+# ─── OS junk ─────────────────────────────────────────────
+.DS_Store
+Thumbs.db
