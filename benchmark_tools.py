@@ -10,6 +10,11 @@ import requests
 import json
 import time
 import sys
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load .env from same directory as script
+load_dotenv(Path(__file__).parent / ".env")
 
 # ─── Config ───────────────────────────────────────────────────────
 BASE_URL = os.getenv("VLLM_BASE_URL", "http://localhost:8000")

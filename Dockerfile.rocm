@@ -1,0 +1,57 @@
+ARG UBUNTU_VERSION=24.04
+ARG ROCM_VERSION=7.2
+ARG AMDGPU_VERSION=7.2
+ARG BASE_ROCM_DEV_CONTAINER=rocm/dev-ubuntu-${UBUNTU_VERSION}:${ROCM_VERSION}-complete
+
+### Build image
+FROM ${BASE_ROCM_DEV_CONTAINER} AS build
+
+# MI300X only — skip fat build, jauh lebih cepat
+ARG ROCM_DOCKER_ARCH='gfx942'
+ENV AMDGPU_TARGETS=${ROCM_DOCKER_ARCH}
+
+RUN apt-get update \
+    && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    libssl-dev \
+    curl \
+    libgomp1
+
+WORKDIR /app
+
+# Clone llama.cpp latest master
+RUN git clone --depth 1 https://github.com/ggml-org/llama.cpp.git . 
+
+RUN HIPCXX="$(hipconfig -l)/clang" HIP_PATH="$(hipconfig -R)" \
+    cmake -S . -B build \
+    -DGGML_HIP=ON \
+    -DGGML_HIP_ROCWMMA_FATTN=ON \
+    -DAMDGPU_TARGETS="$ROCM_DOCKER_ARCH" \
+    -DGGML_BACKEND_DL=ON -DGGML_CPU_ALL_VARIANTS=ON \
+    -DCMAKE_BUILD_TYPE=Release -DLLAMA_BUILD_TESTS=OFF \
+    && cmake --build build --config Release -j$(nproc)
+
+RUN mkdir -p /app/lib \
+    && find build -name "*.so*" -exec cp -P {} /app/lib \;
+
+### Server image — minimal
+FROM ${BASE_ROCM_DEV_CONTAINER} AS server
+
+RUN apt-get update \
+    && apt-get install -y libgomp1 curl \
+    && apt autoremove -y \
+    && apt clean -y \
+    && rm -rf /tmp/* /var/tmp/* \
+    && find /var/cache/apt/archives /var/lib/apt/lists -not -name lock -type f -delete \
+    && find /var/cache -type f -delete
+
+COPY --from=build /app/lib/ /app
+COPY --from=build /app/build/bin/llama-server /app
+
+ENV LLAMA_ARG_HOST=0.0.0.0
+WORKDIR /app
+
+HEALTHCHECK CMD [ "curl", "-f", "http://localhost:8080/health" ]
+ENTRYPOINT [ "/app/llama-server" ]

@@ -1,54 +1,73 @@
 services:
-  vllm:
-    image: vllm/vllm-openai-rocm:v0.15.1
-    container_name: vllm-mi300x-throughput
+  # ─── llama.cpp Server (GGUF on MI300X) ────────────────────────
+  llama-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.rocm
+    image: llama-cpp-rocm-mi300x:latest
+    container_name: llama-mi300x
     privileged: true
     devices:
       - /dev/kfd
       - /dev/dri
     volumes:
-      - ./models:/models              # Cache model download
+      - ./models:/models:ro
     environment:
       - HIP_VISIBLE_DEVICES=0
-      - VLLM_USE_V1=1                     # vLLM v1 engine (lebih cepat)
-      - VLLM_ROCM_USE_AITER=0             # Disable AITER (JIT compile gagal di container)
-      - VLLM_USE_TRITON_FLASH_ATTN=1      # Fallback ke Triton Flash Attention
-      - VLLM_USE_ROCM_SKINNY_GEMM=1       # Optimasi MI300X specific
-      - MIOPEN_FIND_MODE=FAST             # MIOpen kernel tuning
-      - SAFETENSORS_FAST_GPU=1            # Fast GPU loading
-      - PYTORCH_ALLOC_CONF=expandable_segments:True
-      - VLLM_API_KEY=${VLLM_API_KEY}
-      - HF_ENDPOINT=https://hf-mirror.com    # Bypass CloudFront block
-      - HF_TOKEN=${HF_TOKEN}                  # Auth untuk download model
-      # Optimasi throughput
-      - VLLM_SCHEDULER_DELAY_FACTOR=0.0   # No delay, process immediately
-      - VLLM_ENGINE_ITERATION_TIMEOUT_MS=60000
+      - HSA_OVERRIDE_GFX_VERSION=9.4.2   # MI300X GFX target
     ports:
-      - "8000:8000"
-    ipc: host  # Penting untuk shared memory antar proses
+      - "8000:8080"
+    ipc: host
     command:
       - --model
-      - unsloth/Qwen3-Coder-Next-FP8-Dynamic
-      - --max-model-len=262144         # Full 256K context
-      - --max-num-seqs=4               # Kurangin concurrent req, karena context gede
-      - --max-num-batched-tokens=262144
-      - --gpu-memory-utilization=0.95
-      - --kv-cache-dtype=fp8           # FP8 KV cache = 2x context capacity
-      - --enable-chunked-prefill       # Overlap prefill & decode
-      - --tensor-parallel-size=1
-      - --enable-auto-tool-choice      # Qwen3-Coder-Next tool calling
-      - --tool-call-parser=qwen3_coder # Parser khusus Qwen3 Coder
-      - --served-model-name=qwen3-coder-next # Custom model name untuk API
-      - --download-dir=/models         # Simpan model ke volume
-      - --port=8000
-      - --api-key=${VLLM_API_KEY}
-    
+      - /models/Qwen3-Coder-Next-UD-Q4_K_XL/Qwen3-Coder-Next-UD-Q4_K_XL.gguf
+      - --ctx-size
+      - "1048576"                         # 1M total = 256K per slot × 4
+      - --n-gpu-layers
+      - "99"                              # Offload semua layer ke GPU
+      - --flash-attn
+      - "on"                              # Flash Attention buat long context
+      - --threads
+      - "16"
+      - --parallel
+      - "4"                               # 4 concurrent slots × 256K each
+      - --batch-size
+      - "4096"                              # Prefill batch size (default 2048)
+      - --ubatch-size
+      - "1024"                              # Micro batch size (default 512)
+      - --cache-type-k
+      - q8_0                                # KV cache key quantized → hemat VRAM
+      - --cache-type-v
+      - q8_0                                # KV cache value quantized → hemat VRAM
+      - --cache-reuse
+      - "256"                               # Reuse prompt prefix cache (multi-turn speedup)
+      - --mlock                             # Lock model in memory, prevent swap
+      - --metrics                           # Enable Prometheus metrics at /metrics
+      - --cont-batching                   # Continuous batching
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8080"
+      - --api-key
+      - "${VLLM_API_KEY}"
+      - --temp
+      - "1.0"                             # Qwen recommended
+      - --top-p
+      - "0.95"                            # Qwen recommended
+      - --top-k
+      - "40"                              # Qwen recommended
+      - --min-p
+      - "0.01"                            # Qwen recommended (llama.cpp default 0.05)
+      - --repeat-penalty
+      - "1.0"                             # Qwen recommended: disabled
+      - --alias
+      - "qwen3-coder-next"                # Model name untuk API
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 300s               # FP8 model ~80GB, butuh waktu download pertama
+      start_period: 120s                  # GGUF loads faster than FP8
     restart: unless-stopped
 
   # ─── Cloudflare Tunnel (Ingress) ──────────────────────────────
@@ -59,6 +78,6 @@ services:
     environment:
       - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
     depends_on:
-      vllm:
+      llama-server:
         condition: service_started
     restart: unless-stopped

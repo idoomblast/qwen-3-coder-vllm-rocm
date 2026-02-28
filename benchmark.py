@@ -12,7 +12,12 @@ import time
 import statistics
 import sys
 import argparse
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dotenv import load_dotenv
+
+# Load .env from same directory as script
+load_dotenv(Path(__file__).parent / ".env")
 
 # ─── Config ───────────────────────────────────────────────────────
 BASE_URL = os.getenv("VLLM_BASE_URL", "http://localhost:8000")
