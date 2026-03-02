@@ -32,9 +32,9 @@ services:
       - --parallel
       - "4"                               # 4 concurrent slots × 256K each
       - --batch-size
-      - "4096"                              # Prefill batch size (default 2048)
+      - "2048"                              # Prefill batch size (default 2048)
       - --ubatch-size
-      - "1024"                              # Micro batch size (default 512)
+      - "512"                              # Micro batch size (default 512)
       - --cache-type-k
       - q8_0                                # KV cache key quantized → hemat VRAM
       - --cache-type-v
