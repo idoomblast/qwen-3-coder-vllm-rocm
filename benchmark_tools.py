@@ -18,7 +18,7 @@ load_dotenv(Path(__file__).parent / ".env")
 
 # ─── Config ───────────────────────────────────────────────────────
 BASE_URL = os.getenv("VLLM_BASE_URL", "http://localhost:8000")
-API_KEY = os.getenv("VLLM_API_KEY", "")
+API_KEY = os.getenv("API_KEY", "")
 MODEL = os.getenv("VLLM_MODEL", "qwen3-coder-next")
 
 HEADERS = {

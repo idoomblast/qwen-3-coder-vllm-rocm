@@ -75,7 +75,7 @@ Edit `.env` with your credentials:
 
 ```dotenv
 HF_TOKEN=hf_your-token-here
-VLLM_API_KEY=sk-your-api-key-here
+API_KEY=sk-your-api-key-here
 CLOUDFLARE_TUNNEL_TOKEN=your-cloudflared-token
 ```
 
@@ -116,7 +116,7 @@ curl http://localhost:8000/health
 
 # Quick test
 curl http://localhost:8000/v1/chat/completions \
-  -H "Authorization: Bearer $VLLM_API_KEY" \
+  -H "Authorization: Bearer $API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"model":"qwen3-coder-next","messages":[{"role":"user","content":"Hello!"}],"max_tokens":64}'
 ```
@@ -249,7 +249,7 @@ python3 swe_bench_run.py eval --predictions results/predictions_lite.jsonl --sub
 |----------|-------------|
 | `HIP_VISIBLE_DEVICES` | `0` — Select GPU device |
 | `HSA_OVERRIDE_GFX_VERSION` | `9.4.2` — MI300X GFX target |
-| `VLLM_API_KEY` | API key for authentication |
+| `API_KEY` | API key for authentication |
 | `CLOUDFLARE_TUNNEL_TOKEN` | Cloudflare Tunnel token |
 
 ### Tuning Tips

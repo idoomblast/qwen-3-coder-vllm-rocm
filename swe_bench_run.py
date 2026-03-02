@@ -48,7 +48,7 @@ except ImportError:
 
 # ─── Config ───────────────────────────────────────────────────────
 VLLM_BASE_URL = os.getenv("VLLM_BASE_URL", "http://localhost:8000/v1")
-API_KEY = os.getenv("VLLM_API_KEY", "")
+API_KEY = os.getenv("API_KEY", "")
 MODEL = os.getenv("VLLM_MODEL", "qwen3-coder-next")
 RESULTS_DIR = Path("./results")
 

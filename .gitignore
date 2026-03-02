@@ -1,5 +1,4 @@
 # ─── Model files (huge, jangan masuk git) ────────────────
-models/
 *.gguf
 *.safetensors
 *.bin

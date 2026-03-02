@@ -49,7 +49,7 @@ services:
       - --port
       - "8080"
       - --api-key
-      - "${VLLM_API_KEY}"
+      - "${API_KEY}"
       - --temp
       - "1.0"                             # Qwen recommended
       - --top-p
